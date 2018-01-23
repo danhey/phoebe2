@@ -25,14 +25,14 @@ def test_binary(plot=False):
 
     b.set_value_all('ld_func', 'logarithmic')
     b.set_value_all('ld_coeffs', [0.0, 0.0])
-
+    
     for gravb in [0.1, 0.9]:
         b.set_value('gravb_bol', component='primary', value=gravb)
 
 
-        print "running phoebe2 model..."
+        if plot: print "running phoebe2 model..."
         b.run_compute(compute='phoebe2', irrad_method='none', model='phoebe2model')
-        print "running phoebe1 model..."
+        if plot: print "running phoebe1 model..."
         b.run_compute(compute='phoebe1', refl_num=0, model='phoebe1model')
 
         phoebe2_val = b.get_value('fluxes@phoebe2model')

@@ -5,7 +5,14 @@ from phoebe.parameters import constraint
 from phoebe import u
 from phoebe import conf
 
-def spot(**kwargs):
+def _component_allowed_for_feature(feature_kind, component_kind):
+    _allowed = {}
+    _allowed['spot'] = ['star', 'envelope']
+    _allowed['pulsation'] = ['star', 'envelope']
+
+    return component_kind in _allowed[feature_kind]
+
+def spot(feature, **kwargs):
     """
     Create parameters for a spot
 
@@ -19,7 +26,7 @@ def spot(**kwargs):
     params = []
 
     params += [FloatParameter(qualifier="colat", value=kwargs.get('colat', 0.0), default_unit=u.deg, description='Colatitude of the center of the spot')]
-    params += [FloatParameter(qualifier="colon", value=kwargs.get('colon', 0.0), default_unit=u.deg, description='Colongitude of the center of the spot')]
+    params += [FloatParameter(qualifier="long", value=kwargs.get('long', 0.0), default_unit=u.deg, description='Longitude of the center of the spot')]
     params += [FloatParameter(qualifier='radius', value=kwargs.get('radius', 1.0), default_unit=u.deg, description='Angular radius of the spot')]
     # params += [FloatParameter(qualifier='area', value=kwargs.get('area', 1.0), default_unit=u.solRad, description='Surface area of the spot')]
 
@@ -30,7 +37,7 @@ def spot(**kwargs):
 
     return ParameterSet(params), constraints
 
-def pulsation(**kwargs):
+def pulsation(feature, **kwargs):
     """
     Create parameters for a pulsation feature
 
@@ -48,8 +55,8 @@ def pulsation(**kwargs):
 
     params += [FloatParameter(qualifier='radamp', value=kwargs.get('radamp', 0.1), default_unit=u.dimensionless_unscaled, description='Relative radial amplitude of the pulsations')]
     params += [FloatParameter(qualifier='freq', value=kwargs.get('freq', 1.0), default_unit=u.d**-1, description='Frequency of the pulsations')]
-    params += [FloatParameter(qualifier='l', value=kwargs.get('l', 1.0), default_unit=u.dimensionless_unscaled, description='Non-radial degree l')]
-    params += [FloatParameter(qualifier='m', value=kwargs.get('m', 1.0), default_unit=u.dimensionless_unscaled, description='Azimuthal order m')]
+    params += [IntParameter(qualifier='l', value=kwargs.get('l', 0), default_unit=u.dimensionless_unscaled, description='Non-radial degree l')]
+    params += [IntParameter(qualifier='m', value=kwargs.get('m', 0), default_unit=u.dimensionless_unscaled, description='Azimuthal order m')]
     params += [BoolParameter(qualifier='teffext', value=kwargs.get('teffext', False), description='Switch to denote whether Teffs are provided by the external code')]
 
 

@@ -153,6 +153,8 @@ class Bundle(ParameterSet):
             for param in self._params:
                 param._bundle = self
 
+            self._hierarchy_param = self.get_parameter(qualifier='hierarchy', context='system')
+
         # if loading something with constraints, we need to update the
         # bookkeeping so the parameters are aware of how they're constrained
         for constraint in self.filter(context='constraint').to_list():
@@ -165,7 +167,7 @@ class Bundle(ParameterSet):
     def open(cls, filename):
         """Open a new bundle.
 
-        Open a bundle from a JSON-formatted PHOEBE 2.0 (beta) file.
+        Open a bundle from a JSON-formatted PHOEBE 2 file.
         This is a constructor so should be called as:
 
 
@@ -277,7 +279,7 @@ class Bundle(ParameterSet):
         b = cls()
         b.add_star(component=starA)
         b.set_hierarchy(_hierarchy.component(b[starA]))
-        b.add_compute()
+        b.add_compute(distortion_method='rotstar', irrad_method='none')
         return b
 
     @classmethod
@@ -1122,8 +1124,9 @@ class Bundle(ParameterSet):
                                             constraint=self._default_label('incl_aligned', context='constraint'))
 
 
-            if not self.hierarchy.is_contact_binary(component) or self.hierarchy.get_kind_of(component)=='envelope':
+            if (not self.hierarchy.is_contact_binary(component) or self.hierarchy.get_kind_of(component)=='envelope'):
                 # potential constraint shouldn't be done for STARS in OVERCONTACTS
+                # but DOES need to be done for single stars
 
                 logger.info('re-creating potential constraint for {}'.format(component))
                 # TODO: will this cause problems if the constraint has been flipped?
@@ -1232,6 +1235,9 @@ class Bundle(ParameterSet):
         logger warning if fails.  This is also called immediately when calling
         :meth:`run_compute`.
 
+        kwargs are passed to override currently set values as if they were
+        sent to :meth:`run_compute`.
+
         :return: True if passed, False if failed and a message
         """
 
@@ -1248,12 +1254,12 @@ class Bundle(ParameterSet):
             parent_ps = self.get_component(parent)
             if kind in ['star']:
                     # ignore the single star case
-                if parent != 'component':
+                if parent:
                     # MUST NOT be overflowing at PERIASTRON (1-ecc)
                     # TODO: implement this check based of fillout factor or crit_pots constrained parameter?
                     # TODO: only do this if distortion_method == 'roche'
-                    q = parent_ps.get_value('q')
-                    pot = comp_ps.get_value('pot')
+                    q = parent_ps.get_value('q', **kwargs)
+                    pot = comp_ps.get_value('pot', **kwargs)
                     # potentials are DEFINED to be at periastron, so don't need
                     # to worry about volume conservation here
 
@@ -1263,11 +1269,11 @@ class Bundle(ParameterSet):
                     q = roche.q_for_component(q, comp)
                     pot = roche.pot_for_component(pot, q, comp)
 
-                    F = comp_ps.get_value('syncpar')
-                    d = 1 - parent_ps.get_value('ecc')
+                    F = comp_ps.get_value('syncpar', **kwargs)
+                    d = 1 - parent_ps.get_value('ecc', **kwargs)
 
                     # TODO: this needs to be generalized once other potentials are supported
-                    critical_pots = libphoebe.roche_critical_potential(q, F, d, L1=True, L2=True)
+                    critical_pots = libphoebe.roche_critical_potential(q, F, d, L1=True, L2=True, style = 1)
                     # print('q=%f, F=%f, d=%f, pot=%f, cp=%s' % (q, F, d, pot, critical_pots))
 
                     if pot < critical_pots['L1'] or pot < critical_pots['L2']:
@@ -1278,8 +1284,8 @@ class Bundle(ParameterSet):
                 # MUST be overflowing at APASTRON (1+ecc)
                 # TODO: implement this check based of fillout factor or crit_pots constrained parameter
                 # TODO: only do this if distortion_method == 'roche' (which probably will be required for envelope?)
-                pot = comp_ps.get_value('pot')
-                q = parent_ps.get_value('q')
+                pot = comp_ps.get_value('pot', **kwargs)
+                q = parent_ps.get_value('q', **kwargs)
                 # NOTE: pot for envelope will always be as if primary, so no need to invert
                 F = 1.0
                 # NOTE: syncpar is fixed at 1.0 for envelopes
@@ -1288,16 +1294,16 @@ class Bundle(ParameterSet):
                 # We'll either need to transform the pot (using volume conservation??) or
                 # force OCs to be in circular orbits, in which case this test can be done at
                 # periastron as well
-                d = 1 + parent_ps.get_value('ecc')
-                critical_pots = libphoebe.roche_critical_potential(q, F, d, L1=True)
+                d = 1 + parent_ps.get_value('ecc', **kwargs)
+                critical_pots = libphoebe.roche_critical_potential(q, F, d, L1=True, style = 1)
 
                 if pot > critical_pots['L1']:
                     return False,\
                         '{} is not overflowing L1 at apastron'.format(component)
 
                 # BUT MUST NOT be overflowing L2 or L3 at periastron
-                d = 1 - parent_ps.get_value('ecc')
-                critical_pots = libphoebe.roche_critical_potential(q, F, d, L2=True, L3=True)
+                d = 1 - parent_ps.get_value('ecc', **kwargs)
+                critical_pots = libphoebe.roche_critical_potential(q, F, d, L2=True, L3=True, style = 1)
 
                 if pot < critical_pots['L2'] or pot < critical_pots['L3']:
                     return False,\
@@ -1312,8 +1318,8 @@ class Bundle(ParameterSet):
             starrefs = hier.get_children_of(orbitref)
 
             if len(starrefs) == 2 and np.all([hier.get_kind_of(starref)=='star' for starref in starrefs]):
-                q = self.get_value(qualifier='q', component=orbitref, context='component')
-                ecc = self.get_value(qualifier='ecc', component=orbitref, context='component')
+                q = self.get_value(qualifier='q', component=orbitref, context='component', **kwargs)
+                ecc = self.get_value(qualifier='ecc', component=orbitref, context='component', **kwargs)
 
 
                 comp0 = hier.get_primary_or_secondary(starrefs[0], return_ind=True)
@@ -1321,13 +1327,13 @@ class Bundle(ParameterSet):
                 q0 = roche.q_for_component(q, comp0)
                 q1 = roche.q_for_component(q, comp1)
 
-                F0 = self.get_value(qualifier='syncpar', component=starrefs[0], context='component', check_visible=False)
-                F1 = self.get_value(qualifier='syncpar', component=starrefs[1], context='component', check_visible=False)
+                F0 = self.get_value(qualifier='syncpar', component=starrefs[0], context='component', check_visible=False, **kwargs)
+                F1 = self.get_value(qualifier='syncpar', component=starrefs[1], context='component', check_visible=False, **kwargs)
 
-                pot0 = self.get_value(qualifier='pot', component=starrefs[0], context='component')
+                pot0 = self.get_value(qualifier='pot', component=starrefs[0], context='component', **kwargs)
                 pot0 = roche.pot_for_component(pot0, q0, comp0)
 
-                pot1 = self.get_value(qualifier='pot', component=starrefs[1], context='component')
+                pot1 = self.get_value(qualifier='pot', component=starrefs[1], context='component', **kwargs)
                 pot1 = roche.pot_for_component(pot1, q1, comp1)
 
                 xrange0 = libphoebe.roche_xrange(q0, F0, 1.0-ecc, pot0, choice=0)
@@ -1343,8 +1349,8 @@ class Bundle(ParameterSet):
             for starref in hier.get_meshables():
                 orbitref = hier.get_parent_of(starref)
                 if len(hier.get_children_of(orbitref)) == 2:
-                    incl_star = self.get_value(qualifier='incl', component=starref, context='component', unit='deg')
-                    incl_orbit = self.get_value(qualifier='incl', component=orbitref, context='component', unit='deg')
+                    incl_star = self.get_value(qualifier='incl', component=starref, context='component', unit='deg', **kwargs)
+                    incl_orbit = self.get_value(qualifier='incl', component=orbitref, context='component', unit='deg', **kwargs)
                     if abs(incl_star - incl_orbit) > 1e-3:
                         return False,\
                             'misaligned orbits are not currently supported.'
@@ -1376,23 +1382,24 @@ class Bundle(ParameterSet):
 
         for component in self.hierarchy.get_stars():
             # first check ld_coeffs_bol vs ld_func_bol
-            ld_func = self.get_value(qualifier='ld_func_bol', component=component, context='component', check_visible=False)
-            ld_coeffs = self.get_value(qualifier='ld_coeffs_bol', component=component, context='component', check_visible=False)
+            ld_func = self.get_value(qualifier='ld_func_bol', component=component, context='component', check_visible=False, **kwargs)
+            ld_coeffs = self.get_value(qualifier='ld_coeffs_bol', component=component, context='component', check_visible=False, **kwargs)
             check = ld_coeffs_len(ld_func, ld_coeffs)
             if not check[0]:
                 return check
             for dataset in self.datasets:
                 if dataset=='_default' or self.get_dataset(dataset=dataset, kind='*dep').kind not in ['lc_dep', 'rv_dep']:
                     continue
-                ld_func = self.get_value(qualifier='ld_func', dataset=dataset, component=component, context='dataset')
-                ld_coeffs = self.get_value(qualifier='ld_coeffs', dataset=dataset, component=component, context='dataset', check_visible=False)
-                check = ld_coeffs_len(ld_func, ld_coeffs)
-                if not check[0]:
-                    return check
+                ld_func = self.get_value(qualifier='ld_func', dataset=dataset, component=component, context='dataset', **kwargs)
+                ld_coeffs = self.get_value(qualifier='ld_coeffs', dataset=dataset, component=component, context='dataset', check_visible=False, **kwargs)
+                if ld_coeffs is not None:
+                    check = ld_coeffs_len(ld_func, ld_coeffs)
+                    if not check[0]:
+                        return check
 
                 if ld_func=='interp':
                     for compute in kwargs.get('computes', self.computes):
-                        atm = self.get_value(qualifier='atm', component=component, compute=compute, context='compute')
+                        atm = self.get_value(qualifier='atm', component=component, compute=compute, context='compute', **kwargs)
                         if atm != 'ck2004':
                             return False, "ld_func='interp' only supported by atm='ck2004'"
 
@@ -1406,8 +1413,8 @@ class Bundle(ParameterSet):
         #### WARNINGS ONLY ####
         # let's check teff vs gravb_bol
         for component in self.hierarchy.get_stars():
-            teff = self.get_value(qualifier='teff', component=component, context='component', unit=u.k)
-            gravb_bol = self.get_value(qualifier='gravb_bol', component=component, context='component')
+            teff = self.get_value(qualifier='teff', component=component, context='component', unit=u.K, **kwargs)
+            gravb_bol = self.get_value(qualifier='gravb_bol', component=component, context='component', **kwargs)
 
             if teff >= 8000. and gravb_bol < 0.9:
                 return None, "'{}' probably has a radiative atm (teff={:.0f}K>8000K), for which gravb_bol=1.00 might be a better approx than gravb_bol={:.2f}".format(component, teff, gravb_bol)
@@ -1423,7 +1430,7 @@ class Bundle(ParameterSet):
         # we've survived all tests
         return True, ''
 
-    def add_feature(self, kind, component, **kwargs):
+    def add_feature(self, kind, component=None, **kwargs):
         """
         Add a new feature (spot, etc) to a component in the system.  If not
         provided, 'feature' (the name of the new feature) will be created
@@ -1455,6 +1462,10 @@ class Bundle(ParameterSet):
         """
         func = _get_add_func(_feature, kind)
 
+        if kwargs.get('feature', False) is None:
+            # then we want to apply the default below, so let's pop for now
+            _ = kwargs.pop('feature')
+
         kwargs.setdefault('feature',
                           self._default_label(func.func_name,
                                               **{'context': 'feature',
@@ -1462,8 +1473,19 @@ class Bundle(ParameterSet):
 
         self._check_label(kwargs['feature'])
 
+        if component is None:
+            stars = self.hierarchy.get_meshables()
+            if len(stars) == 1:
+                component = stars[0]
+            else:
+                raise ValueError("must provide component")
+
         if component not in self.components:
             raise ValueError('component not recognized')
+
+        component_kind = self.filter(component=component, context='component').kind
+        if not _feature._component_allowed_for_feature(func.func_name, component_kind):
+            raise ValueError("{} does not support component with kind {}".format(func.func_name, component_kind))
 
         params, constraints = func(**kwargs)
 
@@ -1514,10 +1536,16 @@ class Bundle(ParameterSet):
         # TODO: make sure also removes and handles the percomponent parameters correctly (ie maxpoints@phoebe@compute)
         raise NotImplementedError
 
-    def add_spot(self, component, feature=None, **kwargs):
+    def add_spot(self, component=None, feature=None, **kwargs):
         """
         Shortcut to :meth:`add_feature` but with kind='spot'
         """
+        if component is None:
+            if len(self.hierarchy.get_stars())==1:
+                component = self.hierarchy.get_stars()[0]
+            else:
+                raise ValueError("must provide component for spot")
+
         kwargs.setdefault('component', component)
         kwargs.setdefault('feature', feature)
         return self.add_feature('spot', **kwargs)
@@ -1572,6 +1600,10 @@ class Bundle(ParameterSet):
         """
 
         func = _get_add_func(component, kind)
+
+        if kwargs.get('component', False) is None:
+            # then we want to apply the default below, so let's pop for now
+            _ = kwargs.pop('component')
 
         kwargs.setdefault('component',
                           self._default_label(func.func_name,
@@ -1705,7 +1737,7 @@ class Bundle(ParameterSet):
         kwargs.setdefault('kind', 'envelope')
         return self.remove_component(component, **kwargs)
 
-    def get_ephemeris(self, component=None, t0='t0_supconj', shift=True, **kwargs):
+    def get_ephemeris(self, component=None, t0='t0_supconj', **kwargs):
         """
         Get the ephemeris of a component (star or orbit)
 
@@ -1714,20 +1746,19 @@ class Bundle(ParameterSet):
             hierarchy
         :parameter t0: qualifier of the parameter to be used for t0
         :type t0: str
-        :parameter shift: if true, phase shift is applied (which should be
-            done to models); if false, it is not applied (which is suitable
-            for data).
-        :type shift: boolean
         :parameter **kwargs: any value passed through kwargs will override the
-            ephemeris retrieved by component (ie period, t0, phshift, dpdt).
+            ephemeris retrieved by component (ie period, t0, dpdt).
             Note: be careful about units - input values will not be converted.
         :return: dictionary containing period, t0 (t0_supconj if orbit),
-            phshift, dpdt (as applicable)
+            dpdt (as applicable)
         :rtype: dict
         """
 
         if component is None:
             component = self.hierarchy.get_top()
+
+        if kwargs.get('shift', False):
+            raise ValueError("support for phshift was removed as of 2.1.  Please pass t0 instead.")
 
         ret = {}
 
@@ -1735,9 +1766,12 @@ class Bundle(ParameterSet):
 
         if ps.kind in ['orbit']:
             ret['period'] = ps.get_value(qualifier='period', unit=u.d)
-            ret['t0'] = ps.get_value(qualifier=t0, unit=u.d)
-            if shift:
-                ret['phshift'] = ps.get_value(qualifier='phshift')
+            if isinstance(t0, str):
+                ret['t0'] = ps.get_value(qualifier=t0, unit=u.d)
+            elif isinstance(t0, float) or isinstance(t0, int):
+                ret['t0'] = t0
+            else:
+                raise ValueError("t0 must be string (qualifier) or float")
             ret['dpdt'] = ps.get_value(qualifier='dpdt', unit=u.d/u.d)
         elif ps.kind in ['star']:
             # TODO: consider renaming period to prot
@@ -1750,29 +1784,28 @@ class Bundle(ParameterSet):
 
         return ret
 
-    def to_phase(self, time, shift=True, component=None, t0='t0_supconj', **kwargs):
+    def to_phase(self, time, component=None, t0='t0_supconj', **kwargs):
         """
         Get the phase(s) of a time(s) for a given ephemeris
 
         :parameter time: time to convert to phases (should be in same system
             as t0s)
         :type time: float, list, or array
-        :parameter shift: if true, phase shift is applied (which should be
-            done to models); if false, it is not applied (which is suitable
-            for data).
-        :type shift: boolean
         :parameter t0: qualifier of the parameter to be used for t0
         :type t0: str
         :parameter str component: component for which to get the ephemeris.
             If not given, component will default to the top-most level of the
             current hierarchy
         :parameter **kwargs: any value passed through kwargs will override the
-            ephemeris retrieved by component (ie period, t0, phshift, dpdt).
+            ephemeris retrieved by component (ie period, t0, dpdt).
             Note: be careful about units - input values will not be converted.
         :return: phase (float) or phases (array)
         """
 
-        ephem = self.get_ephemeris(component=component, t0=t0, shift=shift, **kwargs)
+        if kwargs.get('shift', False):
+            raise ValueError("support for phshift was removed as of 2.1.  Please pass t0 instead.")
+
+        ephem = self.get_ephemeris(component=component, t0=t0, **kwargs)
 
         if isinstance(time, list):
             time = np.array(time)
@@ -1782,14 +1815,13 @@ class Bundle(ParameterSet):
             time = self.get_value(time, u.d)
 
         t0 = ephem.get('t0', 0.0)
-        phshift = ephem.get('phshift', 0.0)
         period = ephem.get('period', 1.0)
         dpdt = ephem.get('dpdt', 0.0)
 
         if dpdt != 0:
-            phase = phshift + np.mod(1./dpdt * np.log(period + dpdt*(time-t0)), 1.0)
+            phase = np.mod(1./dpdt * np.log(period + dpdt*(time-t0)), 1.0)
         else:
-            phase = phshift + np.mod((time-t0)/period, 1.0)
+            phase = np.mod((time-t0)/period, 1.0)
 
         if isinstance(phase, float):
             if phase > 0.5:
@@ -1800,43 +1832,41 @@ class Bundle(ParameterSet):
 
         return phase
 
-    def to_time(self, phase, shift=True, component=None, t0='t0_supconj', **kwargs):
+    def to_time(self, phase, component=None, t0='t0_supconj', **kwargs):
         """
         Get the time(s) of a phase(s) for a given ephemeris
 
         :parameter phase: phase to convert to times (should be in
             same system as t0s)
         :type phase: float, list, or array
-        :parameter shift: if true, phase shift is applied (which should be
-            done to models); if false, it is not applied (which is suitable
-            for data).
-        :type shift: boolean
     `   :parameter str component: component for which to get the ephemeris.
             If not given, component will default to the top-most level of the
             current hierarchy
         :parameter t0: qualifier of the parameter to be used for t0
         :type t0: str
         :parameter **kwargs: any value passed through kwargs will override the
-            ephemeris retrieved by component (ie period, t0, phshift, dpdt).
+            ephemeris retrieved by component (ie period, t0, dpdt).
             Note: be careful about units - input values will not be converted.
         :return: time (float) or times (array)
         """
 
-        ephem = self.get_ephemeris(component=component, t0=t0, shift=shift, **kwargs)
+        if kwargs.get('shift', False):
+            raise ValueError("support for phshift was removed as of 2.1.  Please pass t0 instead.")
+
+        ephem = self.get_ephemeris(component=component, t0=t0, **kwargs)
 
         if isinstance(phase, list):
             phase = np.array(phase)
 
         t0 = ephem.get('t0', 0.0)
-        phshift = ephem.get('phshift', 0.0)
         period = ephem.get('period', 1.0)
         dpdt = ephem.get('dpdt', 0.0)
 
         # if changing this, also see parameters.constraint.time_ephem
         if dpdt != 0:
-            time = t0 + 1./dpdt*(np.exp(dpdt*(phase-phshift))-period)
+            time = t0 + 1./dpdt*(np.exp(dpdt*(phase))-period)
         else:
-            time = t0 + (phase-phshift)*period
+            time = t0 + (phase)*period
 
         return time
 
@@ -2256,6 +2286,7 @@ class Bundle(ParameterSet):
                                                qualifier=lhs.qualifier,
                                                component=lhs.component,
                                                dataset=lhs.dataset,
+                                               feature=lhs.feature,
                                                kind=lhs.kind,
                                                model=lhs.model,
                                                constraint_func=func.__name__,
@@ -2412,10 +2443,18 @@ class Bundle(ParameterSet):
         kwargs = {}
         kwargs['twig'] = None
         # TODO: this might not be the case, we just know its not in constraint
-        kwargs['context'] = ['component', 'dataset']
         kwargs['qualifier'] = expression_param.qualifier
         kwargs['component'] = expression_param.component
         kwargs['dataset'] = expression_param.dataset
+        kwargs['feature'] = expression_param.feature
+        kwargs['context'] = []
+        if kwargs['component'] is not None:
+            kwargs['context'] += ['component']
+        if kwargs['dataset'] is not None:
+            kwargs['context'] += ['dataset']
+        if kwargs['feature'] is not None:
+            kwargs['context'] += ['feature']
+
         kwargs['check_visible'] = False
         kwargs['check_default'] = False
         constrained_param = self.get_parameter(**kwargs)
@@ -2654,7 +2693,7 @@ class Bundle(ParameterSet):
         self._kwargs_checks(kwargs, ['protomesh', 'pbmesh', 'skip_checks', 'jobid'])
 
         if not kwargs.get('skip_checks', False):
-            passed, msg = self.run_checks(computes=computes)
+            passed, msg = self.run_checks(computes=computes, **kwargs)
             if passed is None:
                 # then just raise a warning
                 logger.warning(msg)
@@ -2678,7 +2717,11 @@ class Bundle(ParameterSet):
 
         # now if we're supposed to detach we'll just prepare the job for submission
         # either in another subprocess or through some queuing system
-        if detach:
+        if detach and backends._use_mpi:
+            logger.warning("cannot detach when within mpirun, ignoring")
+            detach = False
+
+        if (detach or conf.mpi) and not backends._use_mpi:
             logger.warning("detach support is EXPERIMENTAL")
 
             if times is not None:
@@ -2696,18 +2739,24 @@ class Bundle(ParameterSet):
             # is now, run compute, and then save the resulting model
             script_fname = "_{}.py".format(jobid)
             f = open(script_fname, 'w')
+            f.write("import os; os.environ['PHOEBE_ENABLE_PLOTTING'] = 'FALSE'; os.environ['PHOEBE_ENABLE_SYMPY'] = 'FALSE'; os.environ['PHOEBE_ENABLE_ONLINE_PASSBANDS'] = 'FALSE';\n")
             f.write("import phoebe; import json\n")
             # TODO: can we skip the history context?  And maybe even other models
             # or datasets (except times and only for run_compute but not run_fitting)
             f.write("bdict = json.loads(\"\"\"{}\"\"\")\n".format(json.dumps(self.to_json())))
             f.write("b = phoebe.Bundle(bdict)\n")
             # TODO: make sure this works with multiple computes
-            f.write("model_ps = b.run_compute(compute='{}', model='{}')\n".format(compute, model))  # TODO: support other kwargs
+            compute_kwargs = kwargs.items()+[('compute', compute), ('model', model)]
+            compute_kwargs_string = ','.join(["{}=\'{}\'".format(k,v) for k,v in compute_kwargs])
+            f.write("model_ps = b.run_compute({})\n".format(compute_kwargs_string))
             f.write("model_ps.save('_{}.out', incl_uniqueid=True)\n".format(jobid))
             f.close()
 
             script_fname = os.path.abspath(script_fname)
-            cmd = 'python {} &>/dev/null &'.format(script_fname)
+            cmd = conf.detach_cmd.format(script_fname)
+            # TODO: would be nice to catch errors caused by the detached script...
+            # but that would probably need to be the responsibility of the
+            # jobparam to return a failed status and message
             subprocess.call(cmd, shell=True)
 
             # create model parameter and attach (and then return that instead of None)
@@ -2720,10 +2769,13 @@ class Bundle(ParameterSet):
             metawargs = {'context': 'model', 'model': model}
             self._attach_params([job_param], **metawargs)
 
-            logger.info("detaching from run_compute.  Call get_model('{}').attach() to re-attach".format(model))
-
             if isinstance(detach, str):
                 self.save(detach)
+
+            if not detach:
+                return job_param.attach()
+            else:
+                logger.info("detaching from run_compute.  Call get_model('{}').attach() to re-attach".format(model))
 
             # return self.get_model(model)
             return job_param

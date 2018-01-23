@@ -21,18 +21,19 @@ if os.getcwd().find(os.path.abspath(os.path.split(os.path.split(__file__)[0])[0]
 # unless 'Agg' is used before the import. All X-systems define the
 # 'DISPLAY' environment variable, and all non-X-systems do not. We do make a
 # distinction between windows and unix based system. Hence:
-try:
-    import matplotlib
-except ImportError:
-    pass
-    # we'll catch this later in plotting and throw warnings as necessary
-else:
-    if 'DISPLAY' not in os.environ.keys() and sys.platform not in ['win32','cygwin']:
-        matplotlib.use('Agg')
-    elif hasattr(sys, 'real_prefix'):
-        # then we're likely in a virtualenv.  Our best bet is to use the 'TkAgg'
-        # backend, but this will require python-tk to be installed on the system
-        matplotlib.use('TkAgg')
+if os.getenv('PHOEBE_ENABLE_PLOTTING', 'TRUE').upper() == 'TRUE':
+    try:
+        import matplotlib
+    except ImportError:
+        pass
+        # we'll catch this later in plotting and throw warnings as necessary
+    else:
+        if 'DISPLAY' not in os.environ.keys() and sys.platform not in ['win32','cygwin']:
+            matplotlib.use('Agg')
+        elif hasattr(sys, 'real_prefix'):
+            # then we're likely in a virtualenv.  Our best bet is to use the 'TkAgg'
+            # backend, but this will require python-tk to be installed on the system
+            matplotlib.use('TkAgg')
 
 import logging
 _logger = logging.getLogger("PHOEBE")
@@ -53,6 +54,21 @@ class Settings(object):
 
         # And we'll require explicitly setting developer mode on
         self._devel = False
+
+        def _to_bool(value):
+            if isinstance(value, bool):
+                return value
+            elif value.upper()=='TRUE':
+                return True
+            else:
+                return False
+
+        self._do_mpirun = _to_bool(os.getenv('PHOEBE_ENABLE_MPI', False))
+        self._mpi_np = int(os.getenv('PHOEBE_MPI_NP', 2))
+        self._force_serial = False
+
+    def reset(self):
+        self.__init__()
 
     def interactive_on(self):
         self._interactive = True
@@ -76,6 +92,20 @@ class Settings(object):
     def devel(self):
         return self._devel
 
+    @property
+    def force_serial(self):
+        return self._force_serial
+
+    @property
+    def mpi(self):
+        return self._do_mpirun
+
+    @property
+    def detach_cmd(self):
+        if self._do_mpirun:
+            return 'mpirun -np %d python {} &>/dev/null &' % self._mpi_np
+        else:
+            return 'python {} &>/dev/null &'
 
 
 conf = Settings()
@@ -90,6 +120,7 @@ from .constants import *
 from .parameters import *
 from .parameters import hierarchy, component, compute, constraint, dataset
 from .frontend.bundle import Bundle
+from .frontend import nphelpers
 from .backend import *
 import utils as utils
 
@@ -130,6 +161,9 @@ def default_doubledouble(*args, **kwargs):
 def default_quadruple(*args, **kwargs):
     return Bundle.default_quadruple(*args, **kwargs)
 
+def reset_settings():
+    conf.reset()
+
 def is_interactive():
     return conf.interactive
 
@@ -147,3 +181,6 @@ def devel_on():
 
 def devel_off():
     conf.devel_off()
+
+
+
