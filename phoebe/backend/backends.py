@@ -788,9 +788,9 @@ def phoebe(b, compute, times=[], as_generator=False, **kwargs):
                 this_obs = b.filter(dataset=info['dataset'], component=info['component'], context='dataset')
                 # TODO: we need to populate Ns... either as times are straight from the obs or by fixing this statement (currently doesn't work for len=1)
                 # this_syn['Ns'].append(this_obs.get_parameter(qualifier='Ns')[len(this_syn['Ns'])])  # TODO: there must be a better/cleaner way to do this
-                this_syn['time_ephems'].append(time)  # NOTE: no longer under constraint control
-                this_syn['time_ecls'].append(time_ecl)
-                this_syn['etvs'].append(time_ecl-time)  # NOTE: no longer under constraint control
+                packet[k]['time_ephems'] = time # NOTE: no longer under constraint control
+                packet[k]['time_ecls'] = time_ecl
+                packet[k]['etvs'] = time_ecl - time # NOTE: no longer under constraint control
 
             #~ elif kind=='ifm':
                 #~ observables_ifm = system.observe(info['dataset'], kind=kind, components=info['component'], distance=distance)
@@ -868,18 +868,18 @@ def phoebe(b, compute, times=[], as_generator=False, **kwargs):
                     packet[k]['horizon_zs'] = horizons[cind][:,2]
 
                 if dynamics_method in ['nbody', 'rebound'] and body.distortion_method == 'roche':
-                    this_syn['d'] = di[cind]
-                    this_syn['syncpar'] = Fi[cind]
+                    packet[k]['d'] = di[cind]
+                    packet[k]['syncpar'] = Fi[cind]
 
 
                     # print "***", periodi, smai, ecci, per0i, long_ani, incli, perpassi
-                    this_syn['period'] = periodi[cind] * u.d
-                    this_syn['sma'] = smai[cind] * u.AU
-                    this_syn['ecc'] = ecci[cind]
-                    this_syn['per0'] = per0i[cind] * u.rad
-                    this_syn['long_an'] = long_ani[cind] * u.rad
-                    this_syn['incl'] = incli[cind] * u.rad
-                    this_syn['t0_perpass'] = t0_perpassi[cind] * u.d
+                    packet[k]['period'] = periodi[cind] * u.d
+                    packet[k]['sma'] = smai[cind] * u.AU
+                    packet[k]['ecc'] = ecci[cind]
+                    packet[k]['per0'] = per0i[cind] * u.rad
+                    packet[k]['long_an'] = long_ani[cind] * u.rad
+                    packet[k]['incl'] = incli[cind] * u.rad
+                    packet[k]['t0_perpass'] = t0_perpassi[cind] * u.d
 
                 # Analytic horizon
                 if do_horizon:
