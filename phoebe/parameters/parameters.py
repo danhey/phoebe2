@@ -4602,7 +4602,7 @@ class FloatArrayParameter(FloatParameter):
 
         if isinstance(value, u.Quantity):
             if isinstance(value.value, float) or isinstance(value.value, int):
-                value = np.array([value])
+                value = np.array([value.value])*value.unit
 
         # if isinstance(value, str):
             # value = np.fromstring(value)
