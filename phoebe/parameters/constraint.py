@@ -459,14 +459,12 @@ def _true_anom_to_phase(true_anom, period, ecc, per0):
     """
     TODO: add documentation
     """
-    phshift = 0
-
     mean_anom = true_anom - (ecc*sin(true_anom))*u.deg
 
     Phi = (mean_anom + per0) / (360*u.deg) - 1./4
 
-    # phase = Phi - (phshift - 0.25 + per0/(360*u.deg)) * period
-    phase = (Phi*u.d - (phshift - 0.25 + per0/(360*u.deg)) * period)*(u.cycle/u.d)
+    # phase = Phi - (- 0.25 + per0/(360*u.deg)) * period
+    phase = (Phi*u.d - (- 0.25 + per0/(360*u.deg)) * period)*(u.cycle/u.d)
 
     return phase
 
@@ -479,9 +477,8 @@ def ph_supconj(b, orbit, solve_for=None, **kwargs):
     # metawargs = orbit_ps.meta
     #metawargs.pop('qualifier')
 
-    # t0_ph0 and phshift both exist by default, so we don't have to worry about creating either
+    # t0_ph0 exists by default, so we don't have to worry about creating it
     # t0_ph0 = orbit_ps.get_parameter(qualifier='t0_ph0')
-    # phshift = orbit_ps.get_parameter(qualifier='phshift')
     ph_supconj = orbit_ps.get_parameter(qualifier='ph_supconj')
     per0 = orbit_ps.get_parameter(qualifier='per0')
     ecc = orbit_ps.get_parameter(qualifier='ecc')
@@ -499,8 +496,6 @@ def ph_supconj(b, orbit, solve_for=None, **kwargs):
 
         rhs = _true_anom_to_phase(true_anom_supconj, period, ecc, per0)
 
-    #elif solve_for in [per0]:
-    #    raise NotImplementedError("phshift constraint does not support solving for per0 yet")
     else:
         raise NotImplementedError
 
@@ -1059,7 +1054,6 @@ def time_ephem(b, component, dataset, solve_for=None, **kwargs):
     time_ephem = b.get_parameter(qualifier='time_ephems', **filterwargs)
     t0 = parentorbit_ps.get_parameter(qualifier='t0_supconj')  # TODO: make sure t0_supconj makes sense here
     period = parentorbit_ps.get_parameter(qualifier='period')
-    phshift = parentorbit_ps.get_parameter(qualifier='phshift')
     dpdt = parentorbit_ps.get_parameter(qualifier='dpdt')
     esinw_ = parentorbit_ps.get_parameter(qualifier='esinw')
 
@@ -1078,8 +1072,7 @@ def time_ephem(b, component, dataset, solve_for=None, **kwargs):
         if component!='_default' and hier.get_primary_or_secondary(component)=='secondary':
             # TODO: make sure this constraint updates if the hierarchy changes?
             N = N + 0.5 + esinw_  # TODO: check this
-        rhs = t0 + ((N - phshift) * period) / (-1 * (N - phshift) * dpdt + one)
-        #rhs = (N-phshift)*period
+        rhs = t0 + (N * period) / (-1 * N * dpdt + one)
     else:
         raise NotImplementedError
 
