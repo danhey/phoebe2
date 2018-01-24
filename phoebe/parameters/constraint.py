@@ -594,48 +594,63 @@ def freq(b, component, solve_for=None, **kwargs):
 #}
 #{ Inter-orbit constraints
 
-def keplers_third_law_hierarchical(b, orbit1, orbit2, solve_for=None, **kwargs):
+def keplers_third_law_hierarchical(b, orbit_out, orbit_in, solve_for=None, **kwargs):
     """
     TODO: add documentation
     """
 
     hier = b.hierarchy
 
-    orbit1_ps = _get_system_ps(b, orbit1)
-    orbit2_ps = _get_system_ps(b, orbit2)
+    orbit_out_ps = _get_system_ps(b, orbit_out)
+    orbit_in_ps = _get_system_ps(b, orbit_in)
 
-    sma1 = orbit1_ps.get_parameter(qualifier='sma')
-    sma2 = orbit2_ps.get_parameter(qualifier='sma')
+    sma_out = orbit_out_ps.get_parameter(qualifier='sma')
+    sma_in = orbit_in_ps.get_parameter(qualifier='sma')
 
-    q1 = orbit1_ps.get_parameter(qualifier='q')
-    q2 = orbit2_ps.get_parameter(qualifier='q')
+    q_out = orbit_out_ps.get_parameter(qualifier='q')
+    # q_in = orbit_in_ps.get_parameter(qualifier='q')
 
-    period1 = orbit1_ps.get_parameter(qualifier='period')
-    period2 = orbit2_ps.get_parameter(qualifier='period')
+    period_out = orbit_out_ps.get_parameter(qualifier='period')
+    period_in = orbit_in_ps.get_parameter(qualifier='period')
 
-    # NOTE: orbit1 is the outer, so we need to check orbit2... which will
+    # NOTE: we need to check orbit_in... which will
     # be the OPPOSITE component as that of the mass we're solving for
-    if hier.get_primary_or_secondary(orbit2_ps.component) == 'primary':
-        qthing1 = 1.0+q1
+    if hier.get_primary_or_secondary(orbit_in_ps.component) == 'primary':
+        hierarchy = '12'
+        qthing_out = 1.0+q_out
     else:
-        qthing1 = 1.0+1./q1
+        hierarchy = '21'
+        qthing_out = 1.0+1./q_out
 
-    if solve_for in [None, sma1]:
-        lhs = sma1
-        rhs = (sma2**3 * qthing1 * period1**2/period2**2)**(1./3)
-    elif solve_for in [q1]:
-        lhs = q1
-        if hier.get_primary_or_secondary(orbit2_ps.component) == 'primary':
-            rhs = (sma1**3/sma2**3) * (period2**2/period1**2) - 1
+    if solve_for in [None, sma_out]:
+        lhs = sma_out
+        rhs = (sma_in**3 / period_in**2 * period_out**2 * qthing_out)**(1./3)
+    elif solve_for in [sma_in]:
+        lhs = sma_in
+        rhs = (sma_out**3 / period_out**2 * period_in**2 * 1./qthing_out)**(1./3)
+    elif solve_for in [period_out]:
+        lhs = period_out
+        rhs = (sma_out**3 / sma_in**3 * period_in**2 * 1./qthing_out)**(1./2)
+        # rhs = (sma1**3/sma2**3 * period2**2/qthing1)**(1./2)
+    elif solve_for in [period_in]:
+        lhs = period_in
+        rhs = (sma_in**3 / sma_out**3 * period_out**2 * qthing_out)**(1./2)
+        # rhs = (sma2**3/sma1**3 * qthing1/period1**2)**(1./2)
+    elif solve_for in [q_out]:
+        lhs = q_out
+        rhs_thing = (sma_out**3/period_out**2 * period_in**2 / sma_out**3)
+        if hierarchy == '12':
+            rhs = rhs_thing - 1
         else:
-            rhs = ((sma1**3/sma2**3) * (period2**2/period1**2) - 1)**-1
+            rhs = 1./(rhs_thing - 1)
+
 
 
     else:
         # TODO: add other options to solve_for
         raise NotImplementedError
 
-    return lhs, rhs, {'orbit1': orbit1, 'orbit2': orbit2}
+    return lhs, rhs, {'orbit_out': orbit_out, 'orbit_in': orbit_in}
 
 #}
 #{ Intra-component constraints
