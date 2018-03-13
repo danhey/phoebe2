@@ -23,7 +23,7 @@ def crossing(b, component, time, dynamics_method='keplerian', ltte=True, tol=1e-
     def get_orbit(times, b, dynamics_method, cind1, cind2, ltte=True):
         if dynamics_method in ['nbody', 'rebound']:
             # TODO: make sure that this takes systemic velocity and corrects positions and velocities (including ltte effects if enabled)
-            ts, xs, ys, zs, vxs, vys, vzs = dynamics.nbody.dynamics_from_bundle(b, times, compute=None, ltte=ltte)
+            ts, xs, ys, zs, vxs, vys, vzs, ds, Fs, ethetas, elongans, eincls, periods, smas, eccs, per0s, long_ans, incls, t0_perpasses = dynamics.nbody.dynamics_from_bundle(b, times, compute=None, ltte=ltte, return_roche_euler=True)
 
         elif dynamics_method=='bs':
             ts, xs, ys, zs, vxs, vys, vzs = dynamics.nbody.dynamics_from_bundle_bs(b, times, compute=None, ltte=ltte)
