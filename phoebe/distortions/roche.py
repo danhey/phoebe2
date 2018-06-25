@@ -18,7 +18,7 @@ def q_for_component(q, component=1):
     else:
         raise NotImplementedError
 
-def pot_for_component(pot, q, component=1):
+def pot_for_component(pot, q, component=1, reverse=False):
     """
 
     q for secondaries should already be flipped (via q_for_component)
@@ -26,7 +26,10 @@ def pot_for_component(pot, q, component=1):
     if component==1:
         return pot
     elif component==2:
-        return q*pot - 0.5 * (q-1)
+        if reverse:
+            return pot/q + 0.5*(q-1)/q
+        else:
+            return q*pot - 0.5 * (q-1)
     else:
         raise NotImplementedError
 
@@ -66,4 +69,4 @@ def criticalL1(q, e, F, component=1):
                                                        L2=False,
                                                        L3=False)
 
-    return critical_pots['L1']
+    return pot_for_component(critical_pots['L1'], q, component, reverse=True)

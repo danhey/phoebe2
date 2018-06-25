@@ -1044,6 +1044,7 @@ class Bundle(ParameterSet):
 
         # TODO: this needs to be generalized once other potentials are supported
         critical_pots = libphoebe.roche_critical_potential(q, F, d, L1=True, L2=True)
+        critical_pots = {k: roche.pot_for_component(v, q, comp, reverse=True) for k,v in critical_pots.items()}
 
         return critical_pots
 
@@ -1169,10 +1170,11 @@ class Bundle(ParameterSet):
                 pot0 = roche.pot_for_component(pot0, q0, comp0)
 
                 pot1 = self.get_value(qualifier='pot', component=starrefs[1], context='component')
-                pot1 = roche.pot_for_component(pot1, q1, comp1)
+                # pot1 = roche.pot_for_component(pot1, q1, comp1)
 
-                xrange0 = libphoebe.roche_xrange(q0, F0, 1.0-ecc, pot0+1e-6, choice=0)
-                xrange1 = libphoebe.roche_xrange(q1, F1, 1.0-ecc, pot1+1e-6, choice=0)
+                xrange0 = libphoebe.roche_xrange(q0, F0, 1.0-ecc, pot0+1e-5, choice=0)
+                print "***", q1, F1, 1.0-ecc, pot1, comp1
+                xrange1 = libphoebe.roche_xrange(q1, F1, 1.0-ecc, pot1+1e-5, choice=0)
 
                 if xrange0[1]+xrange1[1] > 1.0-ecc:
                     return False,\
