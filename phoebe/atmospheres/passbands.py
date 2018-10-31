@@ -20,6 +20,8 @@ import shutil
 import urllib, urllib2
 import json
 
+from phoebe.utils import parse_json
+
 import logging
 logger = logging.getLogger("PASSBANDS")
 logger.addHandler(logging.NullHandler())
@@ -45,7 +47,7 @@ else:
 if not os.path.exists(_pbdir_local):
     logger.info("creating directory {}".format(_pbdir_local))
     os.makedirs(_pbdir_local)
-    
+
 if not os.getenv('PHOEBE_PBDIR','False')=='False':
     _pbdir_env = os.getenv('PHOEBE_PBDIR')
 else:
@@ -147,6 +149,9 @@ class Passband:
         self.pbname = pbname
         self.effwl = effwl
         self.calibrated = calibrated
+        self.reference = reference
+        self.version = version
+        self.comments = comments
 
         # Passband transmission function table:
         ptf_table = np.loadtxt(ptf).T
@@ -166,6 +171,15 @@ class Passband:
         self.ptf_photon = lambda wl: interpolate.splev(wl, self.ptf_photon_func)
         self.ptf_photon_area = interpolate.splint(self.wl[0], self.wl[-1], self.ptf_photon_func, 0)
 
+    def __repr__(self):
+        return('<Passband: %s:%s>' % (self.pbset, self.pbname))
+
+    def __str__(self):
+        # old passband files do not have versions embedded, that is why we have to do this:
+        if not hasattr(self, 'version'):
+            self.version = 1.0
+        return('Passband: %s:%s\nVersion:  %1.1f\nProvides: %s' % (self.pbset, self.pbname, self.version, self.content))
+    
     def save(self, archive):
         struct = dict()
 
@@ -694,6 +708,42 @@ class Passband:
 
         self.content.append('ck2004_ld')
 
+    def export_legacy_ldcoeffs(self, models, filename=None, photon_weighted=True):
+        """
+        @models: the path (including the filename) of legacy's models.list
+        @filename: output filename for storing the table
+
+        Exports CK2004 limb darkening coefficients to a PHOEBE legacy
+        compatible format.
+        """
+
+        if photon_weighted:
+            grid = self._ck2004_ld_photon_grid
+        else:
+            grid = self._ck2004_ld_energy_grid
+
+        if filename is not None:
+            import time
+            f = open(filename, 'w')
+            f.write('# PASS_SET  %s\n' % self.pbset)
+            f.write('# PASSBAND  %s\n' % self.pbname)
+            f.write('# VERSION   1.0\n\n')
+            f.write('# Exported from PHOEBE-2 passband on %s\n' % (time.ctime()))
+            f.write('# The coefficients are computed for the %s-weighted regime.\n\n' % ('photon' if photon_weighted else 'energy'))
+
+        mods = np.loadtxt(models)
+        for mod in mods:
+            Tindex = np.argwhere(self._ck2004_intensity_axes[0] == mod[0])[0][0]
+            lindex = np.argwhere(self._ck2004_intensity_axes[1] == mod[1]/10)[0][0]
+            mindex = np.argwhere(self._ck2004_intensity_axes[2] == mod[2]/10)[0][0]
+            if filename is None:
+                print('%6.3f '*11 % tuple(grid[Tindex, lindex, mindex].tolist()))
+            else:
+                f.write(('%6.3f '*11+'\n') % tuple(self._ck2004_ld_photon_grid[Tindex, lindex, mindex].tolist()))
+
+        if filename is not None:
+            f.close()
+
     def compute_ck2004_ldints(self):
         """
         Computes integrated limb darkening profiles for ck2004 atmospheres.
@@ -776,7 +826,6 @@ class Passband:
         else:
             print('ld_func=%s is invalid; please choose from [linear, logarithmic, square_root, quadratic, power, all].')
             return None
-
 
     def import_wd_atmcof(self, plfile, atmfile, wdidx, Nabun=19, Nlogg=11, Npb=25, Nints=4):
         """
@@ -1066,7 +1115,6 @@ class Passband:
             raise ValueError('atmosphere parameters out of bounds: Teff=%s, logg=%s, abun=%s' % (Teff[nanmask], logg[nanmask], abun[nanmask]))
         return retval
 
-
 def init_passband(fullpath):
     """
     """
@@ -1105,7 +1153,7 @@ def init_passbands(refresh=False):
                 for f in os.listdir(path):
                     if f=='README':
                         continue
-                    init_passband(path+f)                    
+                    init_passband(path+f)
 
 
         _initialized = True
@@ -1135,7 +1183,6 @@ def uninstall_all_passbands(local=True):
         logger.warning("deleting file: {}".format(pbpath))
         os.remove(pbpath)
 
-
 def download_passband(passband, local=True):
     """
     Download and install a given passband from the repository.
@@ -1157,7 +1204,6 @@ def download_passband(passband, local=True):
         raise IOError("unable to download {} passband - check connection".format(passband))
     else:
         init_passband(passband_fname_local)
-
 
 def list_passband_directories():
     return _pbdir_global, _pbdir_local
@@ -1194,7 +1240,7 @@ def list_online_passbands(refresh=False, full_dict=False):
                 else:
                     return []
         else:
-            _online_passbands = json.loads(resp.read())
+            _online_passbands = json.loads(resp.read(), object_pairs_hook=parse_json)
 
     if full_dict:
         return _online_passbands
@@ -1246,7 +1292,6 @@ def Inorm_bol_bb(Teff=5772., logg=4.43, abun=0.0, atm='blackbody', photon_weight
         Teff = np.array((Teff,))
 
     return factor * sigma_sb.value * Teff**4 / np.pi
-
 
 if __name__ == '__main__':
 

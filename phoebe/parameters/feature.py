@@ -5,6 +5,8 @@ from phoebe.parameters import constraint
 from phoebe import u
 from phoebe import conf
 
+### NOTE: if creating new parameters, add to the _forbidden_labels list in parameters.py
+
 def _component_allowed_for_feature(feature_kind, component_kind):
     _allowed = {}
     _allowed['spot'] = ['star', 'envelope']
@@ -25,8 +27,8 @@ def spot(feature, **kwargs):
 
     params = []
 
-    params += [FloatParameter(qualifier="colat", value=kwargs.get('colat', 0.0), default_unit=u.deg, description='Colatitude of the center of the spot')]
-    params += [FloatParameter(qualifier="long", value=kwargs.get('long', 0.0), default_unit=u.deg, description='Longitude of the center of the spot')]
+    params += [FloatParameter(qualifier="colat", value=kwargs.get('colat', 0.0), default_unit=u.deg, description='Colatitude of the center of the spot wrt spin axes')]
+    params += [FloatParameter(qualifier="long", value=kwargs.get('long', 0.0), default_unit=u.deg, description='Longitude of the center of the spot wrt spin axis')]
     params += [FloatParameter(qualifier='radius', value=kwargs.get('radius', 1.0), default_unit=u.deg, description='Angular radius of the spot')]
     # params += [FloatParameter(qualifier='area', value=kwargs.get('area', 1.0), default_unit=u.solRad, description='Surface area of the spot')]
 

@@ -18,9 +18,7 @@ def _beta_vs_legacy(b, plot=False):
 
 
     if plot:
-        plt.cla()
-        b.plot()
-        plt.show()
+        b.plot(show=True)
 
     phoebe2_val = b.get_value('rvs@primary@phnumresults@phnum')
     phoebe1_val = b.get_value('rvs@primary@legnumresults@legnum')
@@ -32,18 +30,15 @@ def _beta_vs_legacy(b, plot=False):
     if plot: print "rv@secondary max abs diff: {}".format(max(np.abs(phoebe1_val-phoebe2_val)))
     assert(np.allclose(phoebe2_val, phoebe1_val, rtol=0., atol=2.0))
 
-    if plot:
-        plt.cla()
-        b.plot()
-        plt.show()
-
-
 def test_binary(plot=False):
 
     b = phoebe.default_binary()
 
     period = b.get_value('period@orbit')
     times = np.linspace(-0.2,1.2*period,51)
+
+    #turn off albedos (legacy requirement)
+    b.set_value_all('irrad_frac_refl_bol',  0.0)    
 
     b.add_dataset('rv', times=times, dataset='rv01', ld_func='logarithmic', ld_coeffs = [0.5,0.5])
 
