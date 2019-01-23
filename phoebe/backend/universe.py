@@ -310,15 +310,6 @@ class System(object):
 
         self.update_positions(t0, x0, y0, z0, vx0, vy0, vz0, etheta0, elongan0, eincl0, ignore_effects=True)
 
-
-        # MOCKUP pblum_ref, self@lc01 not working at the moment because pblum_ref is a choice param
-        '''
-        b.set_value(qualifier='pblum_ref', component='primary', dataset='lc01', value='self')
-        b.set_value(qualifier='pblum_ref', component='primary', dataset='lc02', value='self@lc01')
-        b.set_value(qualifier='pblum_ref', component='secondary', dataset='lc01', value='primary')
-        b.set_value(qualifier='pblum_ref', component='secondary', dataset='lc02', value='primary')
-        '''
-
         # now for each constrained passband@component we need to store the
         # scaling factor between absolute and relative intensities
         pblum_copy = {}
@@ -330,19 +321,16 @@ class System(object):
                 # only LCs need pblum scaling
                 continue
 
-            self.populate_observables(t0, [kind], [dataset],
-                                      ignore_effects=True)
+            self.populate_observables(t0, [kind], [dataset], ignore_effects=True)
 
             for component in ds.filter(qualifier='pblum_ref').components:
                 if component=='_default':
                     continue
                 pblum_ref = ds.get_value(qualifier='pblum_ref', component=component)
 
-                # HACK until pblum_ref choices set up properly
-                if dataset=='lc02' and component=='primary':
-                    pblum_ref='lc01@self'
-
-                if pblum_ref=='self':
+                
+                if pblum_ref=='self' or pblum_ref==component:
+                    # Handle scale if pointing to self
                     pblum = ds.get_value(qualifier='pblum', component=component)
                     ld_func = ds.get_value(qualifier='ld_func', component=component)
                     ld_coeffs = b.get_value(qualifier='ld_coeffs', component=component, dataset=dataset, context='dataset', check_visible=False)
@@ -355,29 +343,28 @@ class System(object):
                     # component we're copying from has a chance to compute its scale
                     # first.
                     if len(pblum_ref.split('@'))==2:
-                        pblum_ref_band, pblum_ref_comp = pblum_ref.split('@')
-                        if pblum_ref_comp=='self':
-                            pblum_ref_comp = component
+                        pblum_ref_comp, pblum_ref_band = pblum_ref.split('@')                        
                     else:
-                        pblum_ref_band, pblum_ref_comp = dataset, pblum_ref
+                        pblum_ref_comp, pblum_ref_band = pblum_ref, dataset 
 
 
-                    pblum_copy[dataset+'@'+component] = pblum_ref_band+'@'+pblum_ref_comp
+                    pblum_copy[component+'@'+dataset] = pblum_ref_comp+'@'+pblum_ref_band
 
-
-        def apply_constraint(all_constrains, already_applied, constrained, constraint):
-            if constrained in already_applied:
-                # then the "constrained" has already been constraint
+        
+        def apply_constraint(all_constrains, already_applied, tobeconstrained, constraint):
+            
+            if tobeconstrained in already_applied:
+                # then the "tobeconstrained" has already been constraint
                 return already_applied
             if constraint in all_constrains.keys():
                 # then the constraint is first constrained by its proper constraint
                 already_applied = apply_constraint(all_constrains, already_applied, constraint, all_constrains[constraint])
 
-            band_ref, comp_ref = constraint.split('@')
-            band, comp = constrained.split('@')
+            comp_ref, band_ref = constraint.split('@')
+            comp, band = tobeconstrained.split('@')
             pblum_scale_ref = self.get_body(comp_ref).get_pblum_scale(band_ref, component=comp_ref)
             self.get_body(comp).set_pblum_scale(band, component=comp, pblum_scale=pblum_scale_ref)
-            already_applied.append(constrained)
+            already_applied.append(tobeconstrained)
 
             return already_applied
 
@@ -387,8 +374,8 @@ class System(object):
 
         pblum_copied = [] # this array stores the already applied constrains
 
-        for constrained, constraint in pblum_copy.items():
-            pblum_copied = apply_constraint(pblum_copy, pblum_copied, constrained, constraint)
+        for tobeconstrained, constraint in pblum_copy.items():
+            pblum_copied = apply_constraint(pblum_copy, pblum_copied, tobeconstrained, constraint)
 
 
     def handle_reflection(self,  **kwargs):
