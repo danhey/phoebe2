@@ -9,7 +9,7 @@ from phoebe.constraints.expression import ConstraintVar
 from phoebe.parameters.twighelpers import _uniqueid_to_uniquetwig
 from phoebe.parameters.twighelpers import _twig_to_uniqueid
 from phoebe.frontend import tabcomplete
-from phoebe.dependencies import nparray
+from phoebe.dependencies import nparray, npdists
 from phoebe.utils import parse_json
 
 import sys
@@ -5941,7 +5941,7 @@ class FloatParameter(Parameter):
         self._timederiv = timederiv
 
     #@update_if_client is on the called get_quantity
-    def get_value(self, unit=None, t=None, **kwargs):
+    def get_value(self, unit=None, t=None, sample=False, **kwargs):
         """
         Get the current value of the <phoebe.parameters.FloatParameter> or
         <phoebe.parameters.FloatArrayParameter>.
@@ -5953,14 +5953,14 @@ class FloatParameter(Parameter):
         """
         default = super(FloatParameter, self).get_value(**kwargs)
         if default is not None: return default
-        quantity = self.get_quantity(unit=unit, t=t, **kwargs)
+        quantity = self.get_quantity(unit=unit, t=t, sample=sample, **kwargs)
         if hasattr(quantity, 'value'):
             return quantity.value
         else:
             return quantity
 
     @update_if_client
-    def get_quantity(self, unit=None, t=None, **kwargs):
+    def get_quantity(self, unit=None, t=None, sample=False, **kwargs):
         """
         Get the current quantity of the <phoebe.parameters.FloatParameter> or
         <phoebe.parameters.FloatArrayParameter>.
@@ -5981,6 +5981,9 @@ class FloatParameter(Parameter):
         * `unit` (unit or string, optional, default=None): unit to convert the
             value.  If not provided, will use the default unit (see
             <phoebe.parameters.FloatParameter.default_unit>)
+        * `sample` (bool, optional, default=False): if the underlying
+            value is a distribution, whether to return a sampled value from the
+            distribution.
         * `**kwargs`: passing a keyword argument that matches the qualifier
             of the Parameter, will return that value instead of the stored value.
             See above for how default values are treated.
@@ -6039,6 +6042,10 @@ class FloatParameter(Parameter):
 
         # TODO: catch astropy units and convert to PHOEBE's?
 
+        if isinstance(value, npdists.BaseDistribution):
+            if sample:
+                value = value.sample(as_quantity=True)
+
         if unit is None or value is None:
             return value
         else:
@@ -6058,6 +6065,9 @@ class FloatParameter(Parameter):
         if isinstance(value, dict) and 'nparray' in value.keys():
             # then we're loading the JSON version of an nparray object
             value = nparray.from_dict(value)
+        if isinstance(value, dict) and 'npdists' in value.keys():
+            # then we're loading the JSON version of an npdists object
+            value = npdists.from_dict(value)
 
         return self._check_type(value), unit
 
@@ -6068,7 +6078,7 @@ class FloatParameter(Parameter):
             if not (isinstance(value.value, float) or isinstance(value.value, int)):
                 raise ValueError("value could not be cast to float")
 
-        elif not (isinstance(value, float) or isinstance(value, int)):
+        elif not (isinstance(value, float) or isinstance(value, int) or isinstance(value, npdists.BaseDistribution)):
             # TODO: probably need to change this to be flexible with all the cast_types
             raise ValueError("value could not be cast to float")
 
@@ -6155,7 +6165,7 @@ class FloatParameter(Parameter):
             raise TypeError("unit must be an phoebe.u.Unit or None, got {}".format(unit))
 
         # check to make sure value and unit don't clash
-        if isinstance(value, u.Quantity) or (isinstance(value, nparray.ndarray) and value.unit is not None):
+        if isinstance(value, u.Quantity) or ((isinstance(value, nparray.ndarray) or isinstance(value, npdists.BaseDistribution)) and value.unit is not None):
             if unit is not None:
                 # check to make sure they're the same
                 if value.unit != unit:
@@ -6168,10 +6178,10 @@ class FloatParameter(Parameter):
 
         elif unit is not None:
             # print "*** converting value to quantity"
-            value = value * unit
+            value *= unit
 
         elif self.default_unit is not None:
-            value = value * self.default_unit
+            value *= self.default_unit
 
         # handle wrapping for angle measurements
         if value is not None and value.unit.physical_type == 'angle':
