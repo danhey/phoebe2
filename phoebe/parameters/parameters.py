@@ -6046,6 +6046,19 @@ class FloatParameter(Parameter):
             if sample:
                 value = value.sample(as_quantity=True)
 
+                # angle wrapping was done on non-distributions while setting value,
+                # but we'll do it here for distributions
+
+                # handle wrapping for angle measurements
+                if value.unit.physical_type == 'angle':
+                    # NOTE: this may fail for nparray types
+                    if value > (360*u.deg) or value < (0*u.deg):
+                        value = value % (360*u.deg)
+                        logger.warning("wrapping value of {} to {}".format(self.qualifier, value))
+
+                if not self.within_limits(value):
+                    raise ValueError("drawn value of {} is outside parameter limits ({}).  Try drawing again or adjusting the distribution.".format(value, self.limits))
+
         if unit is None or value is None:
             return value
         else:
@@ -6184,14 +6197,14 @@ class FloatParameter(Parameter):
             value *= self.default_unit
 
         # handle wrapping for angle measurements
-        if value is not None and value.unit.physical_type == 'angle':
+        if value is not None and not isinstance(value, npdists.BaseDistribution) and value.unit.physical_type == 'angle':
             # NOTE: this may fail for nparray types
             if value > (360*u.deg) or value < (0*u.deg):
                 value = value % (360*u.deg)
                 logger.warning("wrapping value of {} to {}".format(self.qualifier, value))
 
         # make sure the value is within the limits, if this isn't an array or nan
-        if isinstance(value, float) and not self.within_limits(value):
+        if (isinstance(value, float) or isinstance(value, u.Quantity)) and not self.within_limits(value):
             raise ValueError("value of {} must be within limits of {}".format(self.qualifier, self.limits))
 
         # make sure we can convert back to the default_unit
