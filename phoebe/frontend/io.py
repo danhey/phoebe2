@@ -251,7 +251,11 @@ def load_lc_data(filename, indep, dep, indweight=None, mzero=None, dir='./'):
         path = dir
 
     load_file = os.path.join(path, filename)
-    lcdata = np.loadtxt(load_file)
+    try:
+        lcdata = np.loadtxt(load_file)
+    except IOError:
+        logger.warning("Could not load data file referenced at {}. Dataset will be empty.".format(load_file))
+        return {}
     ncol = len(lcdata[0])
     if dep == 'Magnitude':
         mag = lcdata[:,1]
@@ -293,7 +297,11 @@ def load_rv_data(filename, indep, dep, indweight=None, dir='./'):
         path = dir
 
     load_file = os.path.join(path, filename)
-    rvdata = np.loadtxt(load_file)
+    try:
+        rvdata = np.loadtxt(load_file)
+    except IOError:
+        logger.warning("Could not load data file referenced at {}. Dataset will be empty.".format(load_file))
+        return {}
 
     d ={}
     d['phoebe_rv_time'] = rvdata[:,0]
@@ -772,7 +780,7 @@ def load_legacy(filename, add_compute_legacy=True, add_compute_phoebe=True):
 
             rv_dict.update(data_dict)
 
-            time = rv_dict['phoebe_rv_time']
+            time = rv_dict.get('phoebe_rv_time', [])
         #
 
         rv_dataset = det_dataset(eb, passband, dataid, comp, time)
@@ -1436,7 +1444,7 @@ def pass_to_legacy(eb, filename='2to1.phoebe', compute=None, **kwargs):
 # loop through lcs
 
     for x in range(len(lcs)):
-        quals = eb.filter(dataset=lcs[x], context='dataset')+eb.filter(dataset=lcs[x], context='compute')
+        quals = eb.filter(dataset=lcs[x], context=['dataset', 'compute'])
         #phoebe 2 is ALWAYS times so pass time as the ind variable
         parnames.append('phoebe_lc_indep['+str(x+1)+']')
         parvals.append('Time (HJD)')
@@ -1798,9 +1806,7 @@ def pass_to_legacy(eb, filename='2to1.phoebe', compute=None, **kwargs):
             if param.get_value(**kwargs) == 0:
                 #Legacy phoebe will calculate reflection no matter what.
                 # Turn off reflection switch but keep albedos
-                logger.warning('To completely remove irradiation effects in \
-                                Phoebe Legacy irrad_frac_refl_bol must be set \
-                                to zero for both components')
+                logger.warning('To completely remove irradiation effects in PHOEBE Legacy irrad_frac_refl_bol must be set to zero for both components')
                 pname = 'phoebe_reffect_switch'
                 val = '0'
                 ptype='boolean'

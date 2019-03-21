@@ -8,6 +8,7 @@ import copy
 from phoebe.atmospheres import passbands
 from phoebe.distortions import roche, rotstar
 from phoebe.backend import eclipse, oc_geometry, mesh, mesh_wd
+from phoebe.utils import _bytes
 import libphoebe
 
 from phoebe import u
@@ -20,6 +21,7 @@ logger.addHandler(logging.NullHandler())
 
 _basedir = os.path.dirname(os.path.abspath(__file__))
 _pbdir = os.path.abspath(os.path.join(_basedir, '..', 'atmospheres', 'tables', 'passbands'))
+
 
 """
 Class/SubClass Structure of Universe.py:
@@ -209,20 +211,20 @@ class System(object):
         """
         TODO: add documentation
         """
-        return self._bodies.keys()
+        return list(self._bodies.keys())
 
     def values(self):
         """
         TODO: add documentation
         """
-        return self._bodies.values()
+        return list(self._bodies.values())
 
     @property
     def bodies(self):
         """
         TODO: add documentation
         """
-        return self.values()
+        return list(self.values())
 
     def get_body(self, component):
         """
@@ -407,14 +409,14 @@ class System(object):
         if np.all([body.is_convex for body in self.bodies]):
             logger.info("handling reflection (convex case), method='{}'".format(self.irrad_method))
 
-            vertices_per_body = meshes.get_column('vertices').values()
-            triangles_per_body = meshes.get_column('triangles').values()
-            normals_per_body = meshes.get_column('vnormals').values()
-            areas_per_body = meshes.get_column('areas').values()
-            irrad_frac_refls_per_body = meshes.get_column('irrad_frac_refl', computed_type='for_computations').values()
-            teffs_intrins_per_body = meshes.get_column('teffs', computed_type='for_computations').values()
+            vertices_per_body = list(meshes.get_column('vertices').values())
+            triangles_per_body = list(meshes.get_column('triangles').values())
+            normals_per_body = list(meshes.get_column('vnormals').values())
+            areas_per_body = list(meshes.get_column('areas').values())
+            irrad_frac_refls_per_body = list(meshes.get_column('irrad_frac_refl', computed_type='for_computations').values())
+            teffs_intrins_per_body = list(meshes.get_column('teffs', computed_type='for_computations').values())
 
-            ld_func_and_coeffs = [tuple([body.ld_func['bol']] + [np.asarray(body.ld_coeffs['bol'])]) for body in self.bodies]
+            ld_func_and_coeffs = [tuple([_bytes(body.ld_func['bol'])] + [np.asarray(body.ld_coeffs['bol'])]) for body in self.bodies]
 
             fluxes_intrins_and_refl_per_body = libphoebe.mesh_radiosity_problem_nbody_convex(vertices_per_body,
                                                                                        triangles_per_body,
@@ -423,8 +425,8 @@ class System(object):
                                                                                        irrad_frac_refls_per_body,
                                                                                        fluxes_intrins_per_body,
                                                                                        ld_func_and_coeffs,
-                                                                                       self.irrad_method.title(),
-                                                                                       support=b'vertices'
+                                                                                       _bytes(self.irrad_method.title()),
+                                                                                       support=_bytes('vertices')
                                                                                        )
 
             fluxes_intrins_and_refl_flat = meshes.pack_column_flat(fluxes_intrins_and_refl_per_body)
@@ -432,14 +434,14 @@ class System(object):
         else:
             logger.info("handling reflection (general case), method='{}'".format(self.irrad_method))
 
-            vertices_flat = meshes.get_column_flat('vertices')
-            triangles_flat = meshes.get_column_flat('triangles')
-            normals_flat = meshes.get_column_flat('vnormals')
-            areas_flat = meshes.get_column_flat('areas')
-            irrad_frac_refls_flat = meshes.get_column_flat('irrad_frac_refl', computed_type='for_computations')
+            vertices_flat = meshes.get_column_flat('vertices') # np.ndarray
+            triangles_flat = meshes.get_column_flat('triangles') # np.ndarray
+            normals_flat = meshes.get_column_flat('vnormals') # np.ndarray
+            areas_flat = meshes.get_column_flat('areas') # np.ndarray
+            irrad_frac_refls_flat = meshes.get_column_flat('irrad_frac_refl', computed_type='for_computations') # np.ndarray
 
-            ld_func_and_coeffs = [tuple([body.ld_func['bol']] + [np.asarray(body.ld_coeffs['bol'])]) for body in self.mesh_bodies]
-            ld_inds_flat = meshes.pack_column_flat({body.comp_no: np.full(fluxes.shape, body.comp_no-1) for body, fluxes in zip(self.mesh_bodies, fluxes_intrins_per_body)})
+            ld_func_and_coeffs = [tuple([_bytes(body.ld_func['bol'])] + [np.asarray(body.ld_coeffs['bol'])]) for body in self.mesh_bodies] # list
+            ld_inds_flat = meshes.pack_column_flat({body.comp_no: np.full(fluxes.shape, body.comp_no-1) for body, fluxes in zip(self.mesh_bodies, fluxes_intrins_per_body)}) # np.ndarray
 
             fluxes_intrins_and_refl_flat = libphoebe.mesh_radiosity_problem(vertices_flat,
                                                                             triangles_flat,
@@ -449,8 +451,8 @@ class System(object):
                                                                             fluxes_intrins_flat,
                                                                             ld_func_and_coeffs,
                                                                             ld_inds_flat,
-                                                                            self.irrad_method.title(),
-                                                                            support=b'vertices'
+                                                                            _bytes(self.irrad_method.title()),
+                                                                            support=_bytes('vertices')
                                                                             )
 
 
@@ -1762,6 +1764,8 @@ class Star(Body):
 
             # abs_intensities are the projected (limb-darkened) passband intensities
             # TODO: why do we need to use abs(mus) here?
+            # ! Because the interpolation within Imu will otherwise fail.
+            # ! It would be best to pass only [visibilities > 0] elements to Imu.
             abs_intensities = pb.Imu(Teff=self.mesh.teffs.for_computations,
                                      logg=self.mesh.loggs.for_computations,
                                      abun=self.mesh.abuns.for_computations,
@@ -1976,7 +1980,7 @@ class Star_roche(Star):
                                                                 delta=delta,
                                                                 choice=0,
                                                                 full=True,
-                                                                max_triangles=ntriangles*2,
+                                                                max_triangles=int(ntriangles*1.5),
                                                                 vertices=True,
                                                                 triangles=True,
                                                                 centers=True,
@@ -2161,7 +2165,7 @@ class Star_roche_envelope_half(Star):
                                                      delta=delta,
                                                      choice=2,
                                                      full=True,
-                                                     max_triangles=ntriangles*2,
+                                                     max_triangles=int(ntriangles*1.5),
                                                      vertices=True,
                                                      triangles=True,
                                                      centers=True,
@@ -2331,7 +2335,7 @@ class Star_rotstar(Star):
             new_mesh = libphoebe.rotstar_misaligned_marching_mesh(*mesh_args,
                                                                   delta=delta,
                                                                   full=True,
-                                                                  max_triangles=ntriangles*2,
+                                                                  max_triangles=int(ntriangles*1.5),
                                                                   vertices=True,
                                                                   triangles=True,
                                                                   centers=True,
@@ -2483,7 +2487,7 @@ class Star_sphere(Star):
             new_mesh = libphoebe.sphere_marching_mesh(*mesh_args,
                                                       delta=delta,
                                                       full=True,
-                                                      max_triangles=ntriangles*2,
+                                                      max_triangles=int(ntriangles*1.5),
                                                       vertices=True,
                                                       triangles=True,
                                                       centers=True,
@@ -2656,8 +2660,8 @@ class Envelope(Body):
             triangind_primsec_f[indices_prim] = new_triangle_indices_prim
             triangind_secprim_f[indices_sec] = new_triangle_indices_sec
 
-            mesh['triangles'][triangind_primsec] = triangind_primsec_f.reshape(len(triangind_primsec_f) / 3, 3)
-            mesh['triangles'][triangind_secprim] = triangind_secprim_f.reshape(len(triangind_secprim_f) / 3, 3)
+            mesh['triangles'][triangind_primsec] = triangind_primsec_f.reshape(len(triangind_primsec_f) // 3, 3)
+            mesh['triangles'][triangind_secprim] = triangind_secprim_f.reshape(len(triangind_secprim_f) // 3, 3)
 
             # NOTE: this doesn't update the stored entries for scalars (volume, area, etc)
             mesh_halves = [mesh.take(env_comp_triangles==0, env_comp_verts==0), mesh.take(env_comp_triangles==1, env_comp_verts==1)]
