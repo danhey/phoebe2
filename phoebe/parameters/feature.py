@@ -78,10 +78,6 @@ def pulsation(feature, **kwargs):
         <phoebe.parameters.Parameter> objects and a list of all necessary
         constraints.
     """
-    if not conf.devel:
-        raise NotImplementedError("'pulsation' feature not officially supported for this release.  Enable developer mode to test.")
-
-
     params = []
 
     params += [FloatParameter(qualifier='radamp', value=kwargs.get('radamp', 0.1), default_unit=u.dimensionless_unscaled, description='Relative radial amplitude of the pulsations')]
